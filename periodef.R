@@ -181,23 +181,19 @@ periostage = function(SEQN, tooth, site, PD, CAL, data = NULL,
   # extract the SEQN for each subject in the data
   out = tibble(SEQN = unique(df$SEQN))
   
-  # remove values that are NA or coded, if any
-  df = na.omit(df)
-  if(!is.null(coded_values)){
-    df = df[!apply(df == coded_values, 1, any), ]
-  }
-  
   #################################################################################
   # Check for Periodontitis Case Definition Assessable
   # >= 2 teeth with buccal/oral CAL and PD measurements 
   #                     OR
-  # >= 2 non-adjacent teeth with interdental CAL and PD measurements 
+  # >= 2 non-adjacent teeth with interdental CAL measurements 
   #################################################################################
   
   # Check for >= 2 teeth with buccal/oral CAL and PD measurements
   
   buccal_oral_dat = df %>%
-    filter(site %in% buccal_oral_sites)
+    filter(site %in% buccal_oral_sites, 
+           !is.na(CAL), !(CAL %in% coded_values), 
+           !is.na(PD), !(PD %in% coded_values))
   
   buccal_oral_seqn = buccal_oral_dat %>%
     group_by(SEQN) %>%
@@ -205,9 +201,10 @@ periostage = function(SEQN, tooth, site, PD, CAL, data = NULL,
     pull(SEQN) %>%
     unique()
   
-  # Check for >= 2 non adjacent interdental CAL and PD measurements
+  # Check for >= 2 non adjacent interdental CAL measurements
   interdental_dat = df %>%
-    filter(site %in% interdental_sites) 
+    filter(site %in% interdental_sites,
+           !is.na(CAL), !(CAL %in% coded_values)) 
   
   interdental_seqn = interdental_dat %>%
     group_by(SEQN) %>%
@@ -229,7 +226,10 @@ periostage = function(SEQN, tooth, site, PD, CAL, data = NULL,
   # Check for >= 2 buccal or oral CAL >= 3mm and PD > 3 mm
   
   buccal_oral_PD = buccal_oral_dat %>%
-    filter(SEQN %in% buccal_oral_seqn, CAL >= 3, PD > 3) 
+    filter(SEQN %in% buccal_oral_seqn, 
+           !is.na(CAL), !(CAL %in% coded_values), 
+           !is.na(PD), !(PD %in% coded_values),
+           CAL >= 3, PD > 3) 
   
   buccal_oral_PD_seqn = buccal_oral_PD %>%
     group_by(SEQN) %>%
@@ -240,7 +240,8 @@ periostage = function(SEQN, tooth, site, PD, CAL, data = NULL,
   # Check for >= 2 non adjacent interdental CAL >= 1mm 
   
   interdental_PD = interdental_dat %>%
-    filter(SEQN %in% interdental_seqn, CAL >= 1) 
+    filter(SEQN %in% interdental_seqn, 
+           !is.na(CAL), !(CAL %in% coded_values), CAL >= 1) 
   
   interdental_PD_seqn = interdental_PD %>%
     group_by(SEQN) %>%
@@ -272,7 +273,8 @@ periostage = function(SEQN, tooth, site, PD, CAL, data = NULL,
   # Check for Stage 1
   # Maximum interdental CAL 1 - 2 mm
   PD_stage1_seqn = df_PD_stage %>%
-    filter(site %in% interdental_sites) %>%
+    filter(site %in% interdental_sites,
+           !is.na(CAL), !(CAL %in% coded_values)) %>%
     group_by(SEQN) %>%
     filter(max(CAL) >= 1, max(CAL) <= 2) %>%
     pull(SEQN) %>%
@@ -283,7 +285,8 @@ periostage = function(SEQN, tooth, site, PD, CAL, data = NULL,
   # Check for Stages 2 and 3
   # Maximum interdental CAL 3 - 4 mm
   PD_stage23_seqn = df_PD_stage %>%
-    filter(site %in% interdental_sites) %>%
+    filter(site %in% interdental_sites,
+           !is.na(CAL), !(CAL %in% coded_values)) %>%
     group_by(SEQN) %>%
     filter(max(CAL) >= 3, max(CAL) <= 4) %>%
     pull(SEQN) %>%
@@ -292,7 +295,9 @@ periostage = function(SEQN, tooth, site, PD, CAL, data = NULL,
   # Stage = 3, if PD >= 6 mm at >=2 non adjacent teeth
   # Stage = 2, otherwise
   nonadjc_PD_stage23 = df_PD_stage %>%
-    filter(SEQN %in% PD_stage23_seqn, PD >=6) 
+    filter(SEQN %in% PD_stage23_seqn, 
+           !is.na(PD), !(PD %in% coded_values),
+           PD >=6) 
   
   nonadjc_PD_stage23_seqn = nonadjc_PD_stage23 %>%
     group_by(SEQN) %>%
@@ -312,7 +317,8 @@ periostage = function(SEQN, tooth, site, PD, CAL, data = NULL,
   # Check for Stages 3 and 4
   # Maximum interdental CAL >= 5 mm 
   PD_stage34_seqn = df_PD_stage %>%
-    filter(site %in% interdental_sites) %>%
+    filter(site %in% interdental_sites,
+           !is.na(CAL), !(CAL %in% coded_values)) %>%
     group_by(SEQN) %>%
     filter(max(CAL) >= 5) %>%
     pull(SEQN)%>%
@@ -324,6 +330,7 @@ periostage = function(SEQN, tooth, site, PD, CAL, data = NULL,
   # Stage = 4, if # opposing pairs of natural teeth < 10
   PD_stage4_seqn = PD_stage34 %>%
     group_by(SEQN) %>%
+    filter(!is.na(CAL), !is.na(PD)) %>%
     filter(count_opposing_pairs(tooth) < 10) %>%
     pull(SEQN)%>%
     unique()
