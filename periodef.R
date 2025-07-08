@@ -1,4 +1,4 @@
-library(dplyr); library(haven)
+library(dplyr); library(haven); library(rlang)
 
 # function to get periodontal data from the NHANES website from the 2009-10, 2011-12 or
 # 2013-14 paired years
@@ -63,21 +63,14 @@ nhanes_PD = function(year = 2011, site = NULL){
 # function to extract variables either from a dataframe or from the R environment
 # x : the variable that should be extracted
 # data : (optional) data frame, if the variable is a column from the dataframe
-extract_variable = function(x, data = NULL){
-  # Capture the expression passed to x
-  x_expr = substitute(x)
+extract_variable = function(x, data = NULL) {
   
-  # If x is a symbol (variable name), try to find in data or parent frame
-  if (is.symbol(x_expr)) {
-    var_name = deparse(x_expr)
-    if (!is.null(data) && var_name %in% names(data)) {
-      return(data[[var_name]])
-    } else {
-      return(eval(x_expr, envir = parent.frame()))
-    }
+  # tidy evaluation for variable extraction in data or parent frame
+  x_quo = enquo(x)
+  if (!is.null(data)) {
+    return(eval_tidy(x_quo, data))
   } else {
-    # If x is an expression or vector, evaluate it in parent frame and return
-    return(eval(x_expr, envir = parent.frame()))
+    return(eval_tidy(x_quo, parent.frame()))
   }
 }
 
@@ -89,25 +82,25 @@ extract_variable = function(x, data = NULL){
 # PD : value of measured pocket depth (in mm) for each tooth-site
 # CAL : value of measured clinical attachment loss (in mm) for each tooth-site
 # data : (optional) dataframe containing the above variables
-# exclude_third_molars : FALSE/TRUE denoting whether third molars are present or not
-get_data = function(SEQN, tooth, site, PD, CAL, 
-                    data = NULL, exclude_third_molars = TRUE){
+get_data = function(SEQN, tooth, site, PD, CAL, data = NULL) {
   
   # extract the variables using the extract_variable() function
-  SEQN.val = extract_variable(x = SEQN, data = data)
-  tooth.val = extract_variable(x = tooth, data = data)
-  site.val = extract_variable(x = site, data = data)
-  PD.val = extract_variable(x = PD, data = data)
-  CAL.val = extract_variable(x = CAL, data = data)
+  SEQN.val = extract_variable({{SEQN}}, data)
+  tooth.val = extract_variable({{tooth}}, data)
+  site.val = extract_variable({{site}}, data)
+  PD.val = extract_variable({{PD}}, data)
+  CAL.val = extract_variable({{CAL}}, data)
   
   # store the data as a tibble 
-  df = tibble(SEQN = SEQN.val, tooth = tooth.val, site = site.val, 
-              PD = PD.val, CAL = CAL.val)
+  df = tibble(SEQN = SEQN.val, 
+              tooth = as.numeric(tooth.val), 
+              site = site.val, 
+              PD = PD.val, 
+              CAL = CAL.val)
   
   # group the data by SEQN, tooth 
   df = df %>%
     group_by(SEQN, tooth)
-  df$tooth = as.numeric(df$tooth)
   
   return(df)
 }
@@ -169,14 +162,15 @@ count_opposing_pairs = function(teeth_vector, exclude_third_molars = TRUE) {
 # interdental_sites : vector specifying the site names which are interdental
 # buccal_oral_sites : vector specifying the site names which are buccal or oral
 # exclude_third_molars : FALSE/TRUE denoting whether third molars are present or not
-# coded_values : (optional) vector specifying PD and/or CAL measurements that could not be assessed and may be coded (such as 99 in NHANES)
+# coded_values : (optional) vector specifying PD and/or CAL measurements that could not be assessed 
+#               and may be coded (such as 99 in NHANES)
 periostage = function(SEQN, tooth, site, PD, CAL, data = NULL, 
                       interdental_sites, buccal_oral_sites,
                       exclude_third_molars = TRUE, coded_values = NULL){
   
   # construct the dataframe using user-input
-  df = get_data(SEQN = SEQN, tooth = tooth, site = site, PD = PD, CAL = CAL, 
-                data = data, exclude_third_molars = exclude_third_molars)
+  df = get_data(SEQN = {{SEQN}}, tooth = {{tooth}}, site = {{site}}, 
+                PD = {{PD}}, CAL = {{CAL}}, data = data)
   
   # extract the SEQN for each subject in the data
   out = tibble(SEQN = unique(df$SEQN))
@@ -331,7 +325,8 @@ periostage = function(SEQN, tooth, site, PD, CAL, data = NULL,
   PD_stage4_seqn = PD_stage34 %>%
     group_by(SEQN) %>%
     filter(!is.na(CAL), !is.na(PD)) %>%
-    filter(count_opposing_pairs(tooth) < 10) %>%
+    filter(count_opposing_pairs(teeth_vector = tooth, 
+                                exclude_third_molars = exclude_third_molars) < 10) %>%
     pull(SEQN)%>%
     unique()
   
